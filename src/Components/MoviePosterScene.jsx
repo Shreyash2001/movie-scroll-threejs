@@ -1,0 +1,162 @@
+import React, { useRef, useEffect, useMemo } from "react";
+import { useFrame, useThree } from "@react-three/fiber";
+import MoviePoster from "./MoviePoster";
+import { PhysicsSystem } from "../Utils/physicsSystem";
+
+function MoviePosterScene({ movies, onMovieClick }) {
+  const sceneRef = useRef();
+  const physicsRef = useRef(new PhysicsSystem());
+  const mouseRef = useRef({ x: 0, y: 0 });
+  const scrollStateRef = useRef({ isScrolling: false });
+  const tiltRef = useRef({ x: 0, y: 0, z: 0 });
+  const orbitRef = useRef({ x: 0, y: 0, z: 0, energy: 0, phase: 0 }); // NEW
+  const { gl } = useThree();
+
+  const COLUMNS = 15;
+  const SPACING_X = 3.5;
+  const SPACING_Y = 4.8;
+
+  const MIN_ITEMS = 500;
+  const ROWS_NEEDED = Math.ceil(MIN_ITEMS / COLUMNS);
+  const TOTAL_POSTERS = ROWS_NEEDED * COLUMNS;
+
+  const displayMovies = useMemo(() => {
+    if (!movies || movies.length === 0) return [];
+
+    const expanded = [];
+    for (let i = 0; i < TOTAL_POSTERS; i++) {
+      expanded.push(movies[i % movies.length]);
+    }
+    return expanded;
+  }, [movies, TOTAL_POSTERS]);
+
+  const ROWS = ROWS_NEEDED;
+  const GRID_WIDTH = COLUMNS * SPACING_X;
+  const GRID_HEIGHT = ROWS * SPACING_Y;
+
+  const posterPositions = useMemo(() => {
+    return displayMovies.map((movie, index) => {
+      const col = index % COLUMNS;
+      const row = Math.floor(index / COLUMNS);
+
+      return {
+        x: col * SPACING_X - (COLUMNS * SPACING_X) / 2 + SPACING_X / 2,
+        y: -row * SPACING_Y,
+        z: 0,
+        rotation: 0,
+        scale: 1,
+      };
+    });
+  }, [displayMovies]);
+
+  useEffect(() => {
+    const handleWheel = (e) => {
+      e.preventDefault();
+      physicsRef.current.addVelocity(e.deltaX, e.deltaY);
+    };
+
+    const touchStartRef = { current: null };
+
+    const handleTouchStart = (e) => {
+      const touch = e.touches[0];
+      touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+    };
+
+    const handleTouchMove = (e) => {
+      if (touchStartRef.current) {
+        const touch = e.touches[0];
+        const deltaX = touchStartRef.current.x - touch.clientX;
+        const deltaY = touchStartRef.current.y - touch.clientY;
+
+        physicsRef.current.addVelocity(deltaX * 0.5, deltaY * 0.5);
+        touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+      }
+    };
+
+    const handleMouseMove = (e) => {
+      // optional: keep if you're already setting mouseRef elsewhere
+      mouseRef.current.x = (e.clientX / window.innerWidth) * 2 - 1;
+      mouseRef.current.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    };
+
+    const canvas = gl.domElement;
+    canvas.addEventListener("wheel", handleWheel, { passive: false });
+    canvas.addEventListener("touchstart", handleTouchStart, { passive: true });
+    canvas.addEventListener("touchmove", handleTouchMove, { passive: true });
+    window.addEventListener("mousemove", handleMouseMove);
+
+    return () => {
+      canvas.removeEventListener("wheel", handleWheel);
+      canvas.removeEventListener("touchstart", handleTouchStart);
+      canvas.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("mousemove", handleMouseMove);
+    };
+  }, [gl]);
+
+  useFrame((state) => {
+    const position = physicsRef.current.update();
+    const cam = state.camera;
+
+    scrollStateRef.current.isScrolling = physicsRef.current.getIsScrolling();
+    tiltRef.current = physicsRef.current.getTiltRotation();
+    orbitRef.current = physicsRef.current.getOrbitOffset();
+
+    if (sceneRef.current) {
+      const wrappedX = ((position.x % GRID_WIDTH) + GRID_WIDTH) % GRID_WIDTH;
+      const wrappedY = ((position.y % GRID_HEIGHT) + GRID_HEIGHT) % GRID_HEIGHT;
+
+      sceneRef.current.position.x = -wrappedX;
+      sceneRef.current.position.y = -wrappedY;
+    }
+
+    // camera parallax from mouse (Codrops describes this parallax idea for depth). [web:5]
+    const targetX = mouseRef.current.x * 0.3;
+    const targetY = mouseRef.current.y * 0.3;
+    cam.position.x += (targetX - cam.position.x) * 0.05;
+    cam.position.y += (targetY - cam.position.y) * 0.05;
+    cam.lookAt(0, 0, 0);
+  });
+
+  const renderTiledGrid = () => {
+    if (displayMovies.length === 0) return null;
+
+    const tiles = [];
+    for (let tileX = -1; tileX <= 1; tileX++) {
+      for (let tileY = -1; tileY <= 1; tileY++) {
+        const offsetX = tileX * GRID_WIDTH;
+        const offsetY = tileY * GRID_HEIGHT;
+
+        posterPositions.forEach((pos, index) => {
+          const movie = displayMovies[index];
+          const key = `${movie.id}-${index}-${tileX}-${tileY}`;
+
+          tiles.push(
+            <MoviePoster
+              key={key}
+              movie={movie}
+              position={[pos.x + offsetX, pos.y + offsetY, pos.z]}
+              rotation={pos.rotation}
+              scale={pos.scale}
+              onClick={() => onMovieClick(movie)}
+              scrollStateRef={scrollStateRef}
+              tiltRef={tiltRef}
+              orbitRef={orbitRef}
+            />
+          );
+        });
+      }
+    }
+    return tiles;
+  };
+
+  return (
+    <group ref={sceneRef}>
+      <ambientLight intensity={0.9} />
+      <directionalLight position={[10, 10, 5]} intensity={0.8} />
+      <pointLight position={[-10, -10, -5]} intensity={0.8} color="#4488ff" />
+      {renderTiledGrid()}
+    </group>
+  );
+}
+
+export default MoviePosterScene;
