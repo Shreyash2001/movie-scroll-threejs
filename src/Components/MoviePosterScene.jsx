@@ -1,7 +1,10 @@
-import React, { useRef, useEffect, useMemo } from "react";
+import React, { useRef, useEffect, useMemo, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import MoviePoster from "./MoviePoster";
+import MovieDialog from "./MovieDialog";
 import { PhysicsSystem } from "../Utils/physicsSystem";
+import { Html } from "@react-three/drei";
+
 
 function MoviePosterScene({ movies, onMovieClick }) {
   const sceneRef = useRef();
@@ -9,12 +12,16 @@ function MoviePosterScene({ movies, onMovieClick }) {
   const mouseRef = useRef({ x: 0, y: 0 });
   const scrollStateRef = useRef({ isScrolling: false });
   const tiltRef = useRef({ x: 0, y: 0, z: 0 });
-  const orbitRef = useRef({ x: 0, y: 0, z: 0, energy: 0, phase: 0 }); // NEW
+  const cylinderEffectRef = useRef(0);
   const { gl } = useThree();
+
+  const [selectedMovie, setSelectedMovie] = useState(null);
+  const [showDialog, setShowDialog] = useState(false);
 
   const COLUMNS = 15;
   const SPACING_X = 3.5;
   const SPACING_Y = 4.8;
+  const CYLINDER_RADIUS = 12;
 
   const MIN_ITEMS = 500;
   const ROWS_NEEDED = Math.ceil(MIN_ITEMS / COLUMNS);
@@ -49,8 +56,20 @@ function MoviePosterScene({ movies, onMovieClick }) {
     });
   }, [displayMovies]);
 
+  const handleMovieClick = (movie) => {
+    setSelectedMovie(movie);
+    setShowDialog(true);
+    if (onMovieClick) onMovieClick(movie);
+  };
+
+  const handleCloseDialog = () => {
+    setShowDialog(false);
+    setTimeout(() => setSelectedMovie(null), 300);
+  };
+
   useEffect(() => {
     const handleWheel = (e) => {
+      if (showDialog) return;
       e.preventDefault();
       physicsRef.current.addVelocity(e.deltaX, e.deltaY);
     };
@@ -58,11 +77,13 @@ function MoviePosterScene({ movies, onMovieClick }) {
     const touchStartRef = { current: null };
 
     const handleTouchStart = (e) => {
+      if (showDialog) return;
       const touch = e.touches[0];
       touchStartRef.current = { x: touch.clientX, y: touch.clientY };
     };
 
     const handleTouchMove = (e) => {
+      if (showDialog) return;
       if (touchStartRef.current) {
         const touch = e.touches[0];
         const deltaX = touchStartRef.current.x - touch.clientX;
@@ -74,7 +95,6 @@ function MoviePosterScene({ movies, onMovieClick }) {
     };
 
     const handleMouseMove = (e) => {
-      // optional: keep if you're already setting mouseRef elsewhere
       mouseRef.current.x = (e.clientX / window.innerWidth) * 2 - 1;
       mouseRef.current.y = -(e.clientY / window.innerHeight) * 2 + 1;
     };
@@ -91,15 +111,17 @@ function MoviePosterScene({ movies, onMovieClick }) {
       canvas.removeEventListener("touchmove", handleTouchMove);
       window.removeEventListener("mousemove", handleMouseMove);
     };
-  }, [gl]);
+  }, [gl, showDialog]);
 
   useFrame((state) => {
+    if (showDialog) return;
+
     const position = physicsRef.current.update();
     const cam = state.camera;
 
     scrollStateRef.current.isScrolling = physicsRef.current.getIsScrolling();
     tiltRef.current = physicsRef.current.getTiltRotation();
-    orbitRef.current = physicsRef.current.getOrbitOffset();
+    cylinderEffectRef.current = physicsRef.current.getCylinderEffect();
 
     if (sceneRef.current) {
       const wrappedX = ((position.x % GRID_WIDTH) + GRID_WIDTH) % GRID_WIDTH;
@@ -109,7 +131,6 @@ function MoviePosterScene({ movies, onMovieClick }) {
       sceneRef.current.position.y = -wrappedY;
     }
 
-    // camera parallax from mouse (Codrops describes this parallax idea for depth). [web:5]
     const targetX = mouseRef.current.x * 0.3;
     const targetY = mouseRef.current.y * 0.3;
     cam.position.x += (targetX - cam.position.x) * 0.05;
@@ -137,10 +158,12 @@ function MoviePosterScene({ movies, onMovieClick }) {
               position={[pos.x + offsetX, pos.y + offsetY, pos.z]}
               rotation={pos.rotation}
               scale={pos.scale}
-              onClick={() => onMovieClick(movie)}
+              onClick={() => handleMovieClick(movie)}
               scrollStateRef={scrollStateRef}
               tiltRef={tiltRef}
-              orbitRef={orbitRef}
+              cylinderEffectRef={cylinderEffectRef}
+              cylinderRadius={CYLINDER_RADIUS}
+              isDialogOpen={showDialog}
             />
           );
         });
@@ -150,12 +173,34 @@ function MoviePosterScene({ movies, onMovieClick }) {
   };
 
   return (
-    <group ref={sceneRef}>
-      <ambientLight intensity={0.9} />
-      <directionalLight position={[10, 10, 5]} intensity={0.8} />
-      <pointLight position={[-10, -10, -5]} intensity={0.8} color="#4488ff" />
-      {renderTiledGrid()}
-    </group>
+    <>
+      <group ref={sceneRef}>
+        <ambientLight intensity={0.9} />
+        <directionalLight position={[10, 10, 5]} intensity={0.8} />
+        <pointLight position={[-10, -10, -5]} intensity={0.8} color="#4488ff" />
+        {renderTiledGrid()}
+      </group>
+
+      {/* Movie Dialog */}
+      <Html fullscreen style={{ pointerEvents: "medium" }}>
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            pointerEvents: showDialog ? "auto" : "none",
+          }}
+        >
+          <MovieDialog
+            movie={selectedMovie}
+            onClose={handleCloseDialog}
+            isOpen={showDialog}
+          />
+        </div>
+      </Html>
+    </>
   );
 }
 
