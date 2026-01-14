@@ -1,282 +1,445 @@
-import React, { useRef, useEffect, useMemo } from "react";
-import { useFrame } from "@react-three/fiber";
-import { useLoader } from "@react-three/fiber";
-import { TextureLoader, CanvasTexture } from "three";
-import * as THREE from "three";
+// MovieDialog.jsx
+import React from "react";
+import { motion, AnimatePresence } from "framer-motion";
 
-function createTextCanvas(movie) {
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
+function MovieDialog({ movie, onClose, isOpen }) {
+  if (!movie) return null;
 
-  // Set canvas size
-  canvas.width = 1024;
-  canvas.height = 1536;
+  const backdropVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1 },
+    exit: { opacity: 0 },
+  };
 
-  // Background
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const dialogVariants = {
+    hidden: {
+      opacity: 0,
+      scale: 0.8,
+      y: 50,
+    },
+    visible: {
+      opacity: 1,
+      scale: 1,
+      y: 0,
+      transition: {
+        type: "spring",
+        damping: 25,
+        stiffness: 300,
+        duration: 0.5,
+      },
+    },
+    exit: {
+      opacity: 0,
+      scale: 0.9,
+      y: 30,
+      transition: {
+        duration: 0.3,
+      },
+    },
+  };
 
-  // Title
-  ctx.fillStyle = "#222222";
-  ctx.font = "bold 56px Arial";
-  const titleLines = wrapText(ctx, movie.title, canvas.width - 80);
-  let yPos = 80;
-  titleLines.forEach((line) => {
-    ctx.fillText(line, 40, yPos);
-    yPos += 65;
-  });
+  const contentVariants = {
+    hidden: { opacity: 0, x: 20 },
+    visible: {
+      opacity: 1,
+      x: 0,
+      transition: {
+        delay: 0.2,
+        duration: 0.4,
+        staggerChildren: 0.1,
+      },
+    },
+  };
 
-  yPos += 20;
-
-  // Release Date
-  ctx.fillStyle = "#666666";
-  ctx.font = "32px Arial";
-  ctx.fillText("Release Date:", 40, yPos);
-  ctx.fillStyle = "#222222";
-  ctx.font = "bold 32px Arial";
-  ctx.fillText(movie.releaseDate || "N/A", 280, yPos);
-
-  yPos += 60;
-
-  // Rating
-  ctx.fillStyle = "#666666";
-  ctx.font = "32px Arial";
-  ctx.fillText("Rating:", 40, yPos);
-  ctx.fillStyle = "#f39c12";
-  ctx.font = "bold 36px Arial";
-  ctx.fillText(
-    `★ ${movie.rating ? movie.rating.toFixed(1) : "N/A"}/10`,
-    160,
-    yPos
-  );
-
-  yPos += 80;
-
-  // Divider line
-  ctx.strokeStyle = "#e0e0e0";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(40, yPos);
-  ctx.lineTo(canvas.width - 40, yPos);
-  ctx.stroke();
-
-  yPos += 60;
-
-  // Overview label
-  ctx.fillStyle = "#666666";
-  ctx.font = "bold 36px Arial";
-  ctx.fillText("Overview", 40, yPos);
-
-  yPos += 50;
-
-  // Overview text
-  ctx.fillStyle = "#444444";
-  ctx.font = "28px Arial";
-  const overviewLines = wrapText(
-    ctx,
-    movie.overview || "No overview available.",
-    canvas.width - 80
-  );
-  overviewLines.forEach((line, index) => {
-    if (yPos < canvas.height - 100) {
-      ctx.fillText(line, 40, yPos);
-      yPos += 40;
-    }
-  });
-
-  return canvas;
-}
-
-function wrapText(ctx, text, maxWidth) {
-  const words = text.split(" ");
-  const lines = [];
-  let currentLine = words[0];
-
-  for (let i = 1; i < words.length; i++) {
-    const word = words[i];
-    const width = ctx.measureText(currentLine + " " + word).width;
-    if (width < maxWidth) {
-      currentLine += " " + word;
-    } else {
-      lines.push(currentLine);
-      currentLine = word;
-    }
-  }
-  lines.push(currentLine);
-  return lines;
-}
-
-function MovieDialog({ movie, onClose, isOpen, initialPosition }) {
-  const groupRef = useRef();
-  const posterRef = useRef();
-  const detailsRef = useRef();
-  const closeButtonRef = useRef();
-  const animationProgress = useRef(0);
-  const posterTexture = useLoader(TextureLoader, movie.posterUrl);
-
-  const detailsTexture = useMemo(() => {
-    const canvas = createTextCanvas(movie);
-    return new CanvasTexture(canvas);
-  }, [movie]);
-
-  // Create close button texture
-  const closeButtonTexture = useMemo(() => {
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
-    canvas.width = 256;
-    canvas.height = 256;
-
-    // Draw circle
-    ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
-    ctx.beginPath();
-    ctx.arc(128, 128, 100, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Draw X
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 20;
-    ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.moveTo(78, 78);
-    ctx.lineTo(178, 178);
-    ctx.moveTo(178, 78);
-    ctx.lineTo(78, 178);
-    ctx.stroke();
-
-    return new CanvasTexture(canvas);
-  }, []);
-
-  useEffect(() => {
-    if (isOpen) {
-      animationProgress.current = 0;
-    }
-  }, [isOpen]);
-
-  useFrame((state, delta) => {
-    if (!groupRef.current) return;
-
-    if (isOpen && animationProgress.current < 1) {
-      animationProgress.current = Math.min(
-        1,
-        animationProgress.current + delta * 1.5
-      );
-
-      const progress = easeOutCubic(animationProgress.current);
-
-      // Move to center
-      const targetX = 0;
-      const targetY = 0;
-      const targetZ = 8;
-
-      groupRef.current.position.x =
-        initialPosition[0] + (targetX - initialPosition[0]) * progress;
-      groupRef.current.position.y =
-        initialPosition[1] + (targetY - initialPosition[1]) * progress;
-      groupRef.current.position.z =
-        initialPosition[2] + (targetZ - initialPosition[2]) * progress;
-
-      // Flip poster
-      if (posterRef.current) {
-        posterRef.current.rotation.y = progress * Math.PI;
-        const scale = 1 + progress * 1.5;
-        posterRef.current.scale.set(scale, scale, 1);
-      }
-
-      // Slide in details from right
-      if (detailsRef.current) {
-        const detailsProgress = Math.max(0, (progress - 0.4) / 0.6);
-        detailsRef.current.position.x = 4 + detailsProgress * 0;
-        detailsRef.current.scale.set(detailsProgress, detailsProgress, 1);
-      }
-
-      // Fade in close button
-      if (closeButtonRef.current) {
-        const buttonProgress = Math.max(0, (progress - 0.6) / 0.4);
-        closeButtonRef.current.scale.set(buttonProgress, buttonProgress, 1);
-      }
-    }
-  });
-
-  const easeOutCubic = (t) => {
-    return 1 - Math.pow(1 - t, 3);
+  const itemVariants = {
+    hidden: { opacity: 0, y: 10 },
+    visible: { opacity: 1, y: 0 },
   };
 
   return (
-    <group ref={groupRef} position={initialPosition}>
-      {/* Poster with flip animation */}
-      <group ref={posterRef} position={[-3.2, 0, 0]}>
-        {/* Front face - Poster */}
-        <mesh>
-          <planeGeometry args={[3, 4.5]} />
-          <meshStandardMaterial
-            map={posterTexture}
-            side={THREE.FrontSide}
-            roughness={0.8}
-            metalness={0.1}
-          />
-        </mesh>
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          className="dialog-backdrop"
+          variants={backdropVariants}
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+          onClick={onClose}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100vw",
+            height: "100vh",
+            backgroundColor: "rgba(0, 0, 0, 0.85)",
+            backdropFilter: "blur(8px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: "20px",
+          }}
+        >
+          <motion.div
+            className="dialog-container"
+            variants={dialogVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: "relative",
+              display: "flex",
+              maxWidth: "1000px",
+              width: "100%",
+              maxHeight: "90vh",
+              backgroundColor: "#1a1a1a",
+              borderRadius: "16px",
+              overflow: "hidden",
+              boxShadow: "0 25px 50px rgba(0, 0, 0, 0.8)",
+            }}
+          >
+            {/* Close Button */}
+            <motion.button
+              className="close-button"
+              onClick={onClose}
+              whileHover={{ scale: 1.1, rotate: 90 }}
+              whileTap={{ scale: 0.9 }}
+              style={{
+                position: "absolute",
+                top: "16px",
+                right: "16px",
+                width: "40px",
+                height: "40px",
+                borderRadius: "50%",
+                border: "none",
+                backgroundColor: "rgba(255, 255, 255, 0.1)",
+                color: "#fff",
+                fontSize: "24px",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 10,
+                transition: "background-color 0.3s",
+              }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.backgroundColor =
+                  "rgba(255, 255, 255, 0.2)")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.backgroundColor =
+                  "rgba(255, 255, 255, 0.1)")
+              }
+            >
+              ×
+            </motion.button>
 
-        {/* Back face - Details */}
-        <mesh rotation={[0, Math.PI, 0]}>
-          <planeGeometry args={[3, 4.5]} />
-          <meshStandardMaterial
-            color="#ffffff"
-            side={THREE.FrontSide}
-            roughness={0.9}
-            metalness={0.0}
-          />
-        </mesh>
-      </group>
+            {/* Poster Image Section */}
+            <motion.div
+              className="poster-section"
+              initial={{ opacity: 0, x: -30 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.1, duration: 0.4 }}
+              style={{
+                flex: "0 0 350px",
+                minHeight: "500px",
+                background: `url(${movie.posterUrl}) center/cover no-repeat`,
+                position: "relative",
+              }}
+            >
+              <div
+                style={{
+                  position: "absolute",
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  height: "100px",
+                  background: "linear-gradient(to top, #1a1a1a, transparent)",
+                }}
+              />
+            </motion.div>
 
-      {/* Details Panel */}
-      <group ref={detailsRef} position={[4, 0, 0]}>
-        <mesh>
-          <planeGeometry args={[6, 9]} />
-          <meshStandardMaterial
-            map={detailsTexture}
-            side={THREE.DoubleSide}
-            roughness={0.9}
-            metalness={0.0}
-          />
-        </mesh>
+            {/* Content Section */}
+            <motion.div
+              className="content-section"
+              variants={contentVariants}
+              initial="hidden"
+              animate="visible"
+              style={{
+                flex: 1,
+                padding: "40px",
+                overflowY: "auto",
+                display: "flex",
+                flexDirection: "column",
+                gap: "20px",
+              }}
+            >
+              {/* Title */}
+              <motion.h1
+                variants={itemVariants}
+                style={{
+                  margin: 0,
+                  fontSize: "32px",
+                  fontWeight: "700",
+                  color: "#ffffff",
+                  lineHeight: "1.2",
+                  fontFamily:
+                    "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                }}
+              >
+                {movie.title}
+              </motion.h1>
 
-        {/* Panel border/shadow effect */}
-        <mesh position={[0, 0, -0.05]}>
-          <planeGeometry args={[6.2, 9.2]} />
-          <meshStandardMaterial
-            color="#cccccc"
-            side={THREE.DoubleSide}
-            transparent
-            opacity={0.5}
-          />
-        </mesh>
-      </group>
+              {/* Rating and Meta Info */}
+              <motion.div
+                variants={itemVariants}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "16px",
+                  flexWrap: "wrap",
+                }}
+              >
+                {movie.rating && (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      padding: "6px 12px",
+                      backgroundColor: "rgba(255, 193, 7, 0.15)",
+                      borderRadius: "8px",
+                      border: "1px solid rgba(255, 193, 7, 0.3)",
+                    }}
+                  >
+                    <span style={{ color: "#ffc107", fontSize: "18px" }}>
+                      ★
+                    </span>
+                    <span
+                      style={{
+                        color: "#ffc107",
+                        fontWeight: "600",
+                        fontSize: "16px",
+                      }}
+                    >
+                      {movie.rating.toFixed(1)}
+                    </span>
+                  </div>
+                )}
 
-      {/* Close Button */}
-      <mesh
-        ref={closeButtonRef}
-        position={[7.5, 4, 0.1]}
-        onClick={(e) => {
-          e.stopPropagation();
-          onClose();
-        }}
-        onPointerOver={(e) => {
-          e.stopPropagation();
-          document.body.style.cursor = "pointer";
-        }}
-        onPointerOut={(e) => {
-          e.stopPropagation();
-          document.body.style.cursor = "default";
-        }}
-      >
-        <planeGeometry args={[0.8, 0.8]} />
-        <meshStandardMaterial
-          map={closeButtonTexture}
-          transparent
-          side={THREE.DoubleSide}
-        />
-      </mesh>
-    </group>
+                {movie.releaseDate && (
+                  <motion.div
+                    whileHover={{ scale: 1.05 }}
+                    style={{
+                      padding: "6px 12px",
+                      backgroundColor: "rgba(255, 255, 255, 0.05)",
+                      borderRadius: "8px",
+                      color: "#9ca3af",
+                      fontSize: "14px",
+                      fontWeight: "500",
+                    }}
+                  >
+                    {new Date(movie.releaseDate).getFullYear()}
+                  </motion.div>
+                )}
+
+                {movie.runtime && (
+                  <motion.div
+                    whileHover={{ scale: 1.05 }}
+                    style={{
+                      padding: "6px 12px",
+                      backgroundColor: "rgba(255, 255, 255, 0.05)",
+                      borderRadius: "8px",
+                      color: "#9ca3af",
+                      fontSize: "14px",
+                      fontWeight: "500",
+                    }}
+                  >
+                    {movie.runtime} min
+                  </motion.div>
+                )}
+              </motion.div>
+
+              {/* Genres */}
+              {movie.genres && movie.genres.length > 0 && (
+                <motion.div
+                  variants={itemVariants}
+                  style={{
+                    display: "flex",
+                    gap: "8px",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  {movie.genres.map((genre, index) => (
+                    <motion.span
+                      key={index}
+                      whileHover={{ scale: 1.05, y: -2 }}
+                      style={{
+                        padding: "8px 16px",
+                        backgroundColor: "rgba(59, 130, 246, 0.1)",
+                        border: "1px solid rgba(59, 130, 246, 0.3)",
+                        borderRadius: "20px",
+                        color: "#60a5fa",
+                        fontSize: "13px",
+                        fontWeight: "500",
+                        cursor: "default",
+                      }}
+                    >
+                      {genre}
+                    </motion.span>
+                  ))}
+                </motion.div>
+              )}
+
+              {/* Overview Section */}
+              <motion.div
+                variants={itemVariants}
+                style={{
+                  marginTop: "8px",
+                }}
+              >
+                <h3
+                  style={{
+                    margin: "0 0 12px 0",
+                    fontSize: "18px",
+                    fontWeight: "600",
+                    color: "#e5e7eb",
+                    fontFamily:
+                      "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                  }}
+                >
+                  Overview
+                </h3>
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: "15px",
+                    lineHeight: "1.7",
+                    color: "#9ca3af",
+                    fontFamily:
+                      "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                  }}
+                >
+                  {movie.overview || "No overview available."}
+                </p>
+              </motion.div>
+
+              {/* Additional Info */}
+              {(movie.director || movie.cast) && (
+                <motion.div
+                  variants={itemVariants}
+                  style={{
+                    marginTop: "8px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "12px",
+                  }}
+                >
+                  {movie.director && (
+                    <div>
+                      <span
+                        style={{
+                          fontSize: "14px",
+                          fontWeight: "600",
+                          color: "#6b7280",
+                          marginRight: "8px",
+                        }}
+                      >
+                        Director:
+                      </span>
+                      <span
+                        style={{
+                          fontSize: "14px",
+                          color: "#d1d5db",
+                        }}
+                      >
+                        {movie.director}
+                      </span>
+                    </div>
+                  )}
+
+                  {movie.cast && movie.cast.length > 0 && (
+                    <div>
+                      <span
+                        style={{
+                          fontSize: "14px",
+                          fontWeight: "600",
+                          color: "#6b7280",
+                          marginRight: "8px",
+                        }}
+                      >
+                        Cast:
+                      </span>
+                      <span
+                        style={{
+                          fontSize: "14px",
+                          color: "#d1d5db",
+                        }}
+                      >
+                        {movie.cast.slice(0, 5).join(", ")}
+                      </span>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+
+              {/* Action Buttons */}
+              <motion.div
+                variants={itemVariants}
+                style={{
+                  display: "flex",
+                  gap: "12px",
+                  marginTop: "auto",
+                  paddingTop: "20px",
+                }}
+              >
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  style={{
+                    flex: 1,
+                    padding: "14px 24px",
+                    backgroundColor: "#3b82f6",
+                    color: "#ffffff",
+                    border: "none",
+                    borderRadius: "10px",
+                    fontSize: "15px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    fontFamily:
+                      "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                  }}
+                >
+                  Watch Now
+                </motion.button>
+
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  style={{
+                    flex: 1,
+                    padding: "14px 24px",
+                    backgroundColor: "rgba(255, 255, 255, 0.1)",
+                    color: "#ffffff",
+                    border: "1px solid rgba(255, 255, 255, 0.2)",
+                    borderRadius: "10px",
+                    fontSize: "15px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    fontFamily:
+                      "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                  }}
+                >
+                  Add to List
+                </motion.button>
+              </motion.div>
+            </motion.div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 

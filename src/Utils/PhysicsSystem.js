@@ -1,4 +1,3 @@
-// Utils/physicsSystem.js
 export class PhysicsSystem {
   constructor() {
     this.velocity = { x: 0, y: 0 };

@@ -72,7 +72,7 @@ function MoviePoster({
     const scrollDamp = 1 - Math.min(0.6, cylinderEffectStrength);
 
     scaleSpring.current.setTarget(
-      clicked ? scale * 0.3 : hovered ? scale * (1 + 0.05 * scrollDamp) : scale
+      clicked ? scale * 0.85 : hovered ? scale * (1 + 0.05 * scrollDamp) : scale
     );
 
     const currentScale = scaleSpring.current.update();

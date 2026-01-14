@@ -5,7 +5,6 @@ import MovieDialog from "./MovieDialog";
 import { PhysicsSystem } from "../Utils/physicsSystem";
 import { Html } from "@react-three/drei";
 
-
 function MoviePosterScene({ movies, onMovieClick }) {
   const sceneRef = useRef();
   const physicsRef = useRef(new PhysicsSystem());
@@ -182,24 +181,26 @@ function MoviePosterScene({ movies, onMovieClick }) {
       </group>
 
       {/* Movie Dialog */}
-      <Html fullscreen style={{ pointerEvents: "medium" }}>
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "100%",
-            pointerEvents: showDialog ? "auto" : "none",
-          }}
-        >
-          <MovieDialog
-            movie={selectedMovie}
-            onClose={handleCloseDialog}
-            isOpen={showDialog}
-          />
-        </div>
-      </Html>
+      {selectedMovie && (
+        <Html fullscreen style={{ pointerEvents: "medium" }}>
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: "100%",
+              pointerEvents: showDialog ? "auto" : "none",
+            }}
+          >
+            <MovieDialog
+              movie={selectedMovie}
+              onClose={handleCloseDialog}
+              isOpen={showDialog}
+            />
+          </div>
+        </Html>
+      )}
     </>
   );
 }
